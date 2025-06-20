@@ -19,18 +19,14 @@ from livekit.agents import (
     Agent,
     ChatContext,
     ChatMessage,
-    ChatResponse,
     AudioContext,
-    AudioResponse,
     AudioChunk,
     AudioFormat,
     AudioEncoding,
     AudioSource,
     AudioSink,
     VADContext,
-    VADResponse,
     TurnDetectionContext,
-    TurnDetectionResponse,
 )
 from livekit.agents.llm import OpenAILLM
 from livekit.agents.stt import DeepgramSTT
@@ -38,6 +34,7 @@ from livekit.agents.tts import ElevenLabsTTS
 from livekit.agents.vad import SileroVAD
 from livekit.agents.turn_detection import MultilingualTurnDetection
 from livekit.agents.plugins import NoiseCancellationPlugin
+from livekit.agents.types import ChatResponse, AudioResponse, VADResponse, TurnDetectionResponse
 
 # Configure logging
 logging.basicConfig(
@@ -215,105 +212,63 @@ General tone/style: Friendly, supportive, results-focused
 5. Do you have personal trainers?  
    → Absolutely. We have multiple qualified PTs that can support your goals 1-on-1."""
     
-    async def on_chat(self, ctx: ChatContext) -> ChatResponse:
-        """Handle chat messages from the user."""
+    async def on_chat(self, ctx: ChatContext):
         try:
-            # Add user message to conversation history
             self.conversation_history.append({
                 "role": "user",
                 "content": ctx.message.content
             })
-            
-            # Prepare messages for LLM
             messages = [{"role": "system", "content": self.system_prompt}]
-            messages.extend(self.conversation_history[-10:])  # Keep last 10 messages for context
-            
-            # Get response from LLM
+            messages.extend(self.conversation_history[-10:])
             response = await self.llm.chat(messages)
-            
-            # Add assistant response to conversation history
             self.conversation_history.append({
                 "role": "assistant",
                 "content": response.content
             })
-            
-            return ChatResponse(content=response.content)
-            
+            return response.content
         except Exception as e:
             logger.error(f"Error in chat processing: {e}")
-            return ChatResponse(content="I apologize, but I encountered an error. Please try again.")
-    
-    async def on_audio(self, ctx: AudioContext) -> AudioResponse:
-        """Handle audio input and generate audio response."""
+            return "I apologize, but I encountered an error. Please try again."
+
+    async def on_audio(self, ctx: AudioContext):
         try:
-            # Process audio through STT
             transcription = await self.stt.transcribe(ctx.audio)
-            
             if not transcription.text.strip():
-                return AudioResponse()
-            
-            # Detect language and update if needed
+                return b""
             detected_lang = transcription.language or "en"
             if detected_lang != self.language:
                 self.language = detected_lang
                 logger.info(f"Language detected: {detected_lang}")
-            
-            # Create chat context for the transcribed text
             chat_ctx = ChatContext(
                 message=ChatMessage(
                     content=transcription.text,
                     role="user"
                 )
             )
-            
-            # Get text response
             chat_response = await self.on_chat(chat_ctx)
-            
-            if not chat_response.content:
-                return AudioResponse()
-            
-            # Convert text response to speech
-            audio_data = await self.tts.synthesize(chat_response.content)
-            
-            return AudioResponse(
-                audio=AudioChunk(
-                    data=audio_data,
-                    format=AudioFormat(
-                        encoding=AudioEncoding.LINEAR16,
-                        sample_rate=24000,
-                        channels=1
-                    )
-                )
-            )
-            
+            if not chat_response:
+                return b""
+            audio_data = await self.tts.synthesize(chat_response)
+            return audio_data
         except Exception as e:
             logger.error(f"Error in audio processing: {e}")
-            return AudioResponse()
-    
-    async def on_vad(self, ctx: VADContext) -> VADResponse:
-        """Handle Voice Activity Detection."""
+            return b""
+
+    async def on_vad(self, ctx: VADContext):
         try:
             result = await self.vad.detect(ctx.audio)
-            return VADResponse(
-                is_speech=result.is_speech,
-                confidence=result.confidence
-            )
+            return {"is_speech": result.is_speech, "confidence": result.confidence}
         except Exception as e:
             logger.error(f"Error in VAD processing: {e}")
-            return VADResponse(is_speech=False, confidence=0.0)
-    
-    async def on_turn_detection(self, ctx: TurnDetectionContext) -> TurnDetectionResponse:
-        """Handle multilingual turn detection."""
+            return {"is_speech": False, "confidence": 0.0}
+
+    async def on_turn_detection(self, ctx: TurnDetectionContext):
         try:
             result = await self.turn_detection.detect(ctx.audio)
-            return TurnDetectionResponse(
-                is_turn=result.is_turn,
-                confidence=result.confidence,
-                language=result.language
-            )
+            return {"is_turn": result.is_turn, "confidence": result.confidence, "language": result.language}
         except Exception as e:
             logger.error(f"Error in turn detection: {e}")
-            return TurnDetectionResponse(is_turn=False, confidence=0.0)
+            return {"is_turn": False, "confidence": 0.0, "language": None}
     
     async def on_start(self):
         """Called when the agent starts."""
@@ -389,7 +344,7 @@ async def main():
                     message=ChatMessage(content=user_input, role="user")
                 )
                 response = await agent.on_chat(chat_ctx)
-                print(f"Assistant: {response.content}")
+                print(f"Assistant: {response}")
                 
             except KeyboardInterrupt:
                 print("\nAssistant: Goodbye! Have a great day!")

@@ -1,4 +1,4 @@
-livekit-agents
+livekit-agents==1.1.1
 openai
 python-dotenv
 deepgram-sdk
