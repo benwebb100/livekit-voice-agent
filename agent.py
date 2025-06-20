@@ -72,7 +72,7 @@ class VoiceAssistantAgent(Agent):
         
         self.tts = ElevenLabsTTS(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
-            voice="Sarah",
+            voice="aGkVQvWUZi16EH8aZJvT",
             model="eleven_monolingual_v1",
             stability=0.5,
             similarity_boost=0.75
