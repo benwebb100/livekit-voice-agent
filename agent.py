@@ -34,6 +34,30 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
+
+def test_openai_connection():
+    """Test OpenAI API connection."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("ERROR: OPENAI_API_KEY not found in environment")
+        return
+    
+    print(f"OpenAI API Key (first 10 chars): {api_key[:10]}...")
+    
+    # Test the connection
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "Hello"}],
+            max_tokens=10
+        )
+        print("OpenAI API connection successful!")
+    except Exception as e:
+        print(f"OpenAI API error: {e}")
+
+
 class MelbourneFitnessAgent(Agent):
     """Melbourne Fitness Studio voice assistant agent."""
     
@@ -120,18 +144,43 @@ async def entrypoint(ctx: JobContext):
     # Connect to room first
     await ctx.connect()
     logger.info(f"Connected to room: {room_name}")
-    
-    # Create phone-optimized session
-    if is_phone_call:
-        session = AgentSession(
-            stt=deepgram.STT(
+
+    try:
+        # Create phone-optimized session
+        if is_phone_call:
+            await asyncio.sleep(1)
+            session = AgentSession(
+                stt=deepgram.STT(
+                    api_key=os.getenv("DEEPGRAM_API_KEY"),
+                    model="nova-2-phonecall",  # Phone-optimized model
+                    language="en-US",
+                    # Phone-specific settings
+                    smart_format=True,
+                    punctuate=True,
+                    endpointing_ms=1000
+                ),
+                llm=openai.LLM(
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    model="gpt-4o-mini",
+                    temperature=0.7
+                ),
+                tts=elevenlabs.TTS(
+                    api_key=os.getenv("ELEVENLABS_API_KEY"),
+                    voice_id="aGkVQvWUZi16EH8aZJvT",
+                    model="eleven_turbo_v2",  # Low latency model
+                    streaming_latency=3,  # Optimize for phone
+                ),
+                vad=silero.VAD.load(),
+            )
+            
+            logger.info(f"Starting phone session in room: {room_name}")
+        else:
+            # Regular web session config
+            session = AgentSession(
+                stt=deepgram.STT(
                 api_key=os.getenv("DEEPGRAM_API_KEY"),
-                model="nova-2-phonecall",  # Phone-optimized model
-                language="en-US",
-                # Phone-specific settings
-                smart_format=True,
-                punctuate=True,
-                endpointing_ms=1000
+                model="nova-2",
+                language="en-US"
             ),
             llm=openai.LLM(
                 api_key=os.getenv("OPENAI_API_KEY"),
@@ -140,43 +189,17 @@ async def entrypoint(ctx: JobContext):
             ),
             tts=elevenlabs.TTS(
                 api_key=os.getenv("ELEVENLABS_API_KEY"),
-                voice_id="aGkVQvWUZi16EH8aZJvT",
-                model="eleven_turbo_v2",  # Low latency model
-                streaming_latency=3,  # Optimize for phone
+                voice_id="aGkVQvWUZi16EH8aZJvT",  # Use voice_id instead of voice
+                model="eleven_monolingual_v1"
             ),
             vad=silero.VAD.load(),
-        )
+            )
         
-        logger.info(f"Starting phone session in room: {room_name}")
-    else:
-        # Regular web session config
-        session = AgentSession(
-            stt=deepgram.STT(
-            api_key=os.getenv("DEEPGRAM_API_KEY"),
-            model="nova-2",
-            language="en-US"
-        ),
-        llm=openai.LLM(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o-mini",
-            temperature=0.7
-        ),
-        tts=elevenlabs.TTS(
-            api_key=os.getenv("ELEVENLABS_API_KEY"),
-            voice_id="aGkVQvWUZi16EH8aZJvT",  # Use voice_id instead of voice
-            model="eleven_monolingual_v1"
-        ),
-        vad=silero.VAD.load(),
-        )
-    
-    # Start the session
-    await session.start(room=ctx.room, agent=MelbourneFitnessAgent())
-    
-    # # Connect to room
-    # await ctx.connect()
-    
-    # Keep running
-    await asyncio.Event().wait()
+        # Start the session
+        await session.start(room=ctx.room, agent=MelbourneFitnessAgent())
+    except Exception as e:
+        logger.error(f"Failed to start agent session: {e}")
+        await ctx.room.close()
 
 
 async def console_mode():
@@ -290,3 +313,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    test_openai_connection()
