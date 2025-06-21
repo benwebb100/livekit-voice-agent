@@ -5,7 +5,7 @@ import requests
 import json
 import time
 
-BASE_URL = "https://f23b-106-77-137-238.ngrok-free.app"
+BASE_URL = "https://twillio-server-f1fq.onrender.com"
 
 # Check health
 print("Checking health...")

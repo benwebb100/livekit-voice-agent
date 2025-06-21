@@ -265,6 +265,58 @@ async def handle_stream_start(data: dict, stream_info: StreamInfo):
     active_streams[stream_info.stream_sid] = stream_info
 
 
+# async def connect_to_livekit(stream_info: StreamInfo):
+#     """Connect to LiveKit room and set up audio tracks."""
+#     try:
+#         # Create room instance
+#         stream_info.room = rtc.Room()
+        
+#         # Set up event handlers
+#         @stream_info.room.on("track_subscribed")
+#         def on_track_subscribed(track: rtc.Track, *args):
+#             """Handle when we receive audio from the agent."""
+#             if isinstance(track, rtc.RemoteAudioTrack):
+#                 logger.info(f"Subscribed to audio track: {track.sid}")
+#                 stream_info.subscribed_track = track
+#                 # Start forwarding audio to Twilio
+#                 asyncio.create_task(forward_audio_to_twilio(stream_info))
+        
+#         # Create audio source for phone input
+#         stream_info.audio_source = rtc.AudioSource(
+#             sample_rate=8000,  # Twilio uses 8kHz
+#             num_channels=1
+#         )
+        
+#         # Create audio track
+#         stream_info.audio_track = rtc.LocalAudioTrack.create_audio_track(
+#             "phone_input", 
+#             stream_info.audio_source
+#         )
+        
+#         # Generate token
+#         token = generate_token(
+#             stream_info.room_name, 
+#             f"phone-{stream_info.from_number}"
+#         )
+        
+#         # Connect to room
+#         await stream_info.room.connect(LIVEKIT_URL, token)
+#         logger.info(f"Connected to LiveKit room: {stream_info.room_name}")
+        
+#         # Publish phone audio track
+#         await stream_info.room.local_participant.publish_track(
+#             stream_info.audio_track,
+#             rtc.TrackPublishOptions(
+#                 name="phone_input",
+#                 source=rtc.TrackSource.SOURCE_MICROPHONE
+#             )
+#         )
+#         logger.info("Published phone audio track")
+        
+#     except Exception as e:
+#         logger.error(f"Failed to connect to LiveKit: {e}")
+#         raise
+
 async def connect_to_livekit(stream_info: StreamInfo):
     """Connect to LiveKit room and set up audio tracks."""
     try:
@@ -303,11 +355,11 @@ async def connect_to_livekit(stream_info: StreamInfo):
         await stream_info.room.connect(LIVEKIT_URL, token)
         logger.info(f"Connected to LiveKit room: {stream_info.room_name}")
         
-        # Publish phone audio track
+        # Publish phone audio track - UPDATED CODE
         await stream_info.room.local_participant.publish_track(
             stream_info.audio_track,
             rtc.TrackPublishOptions(
-                name="phone_input",
+                # Remove the 'name' field as it's not supported
                 source=rtc.TrackSource.SOURCE_MICROPHONE
             )
         )
@@ -316,7 +368,6 @@ async def connect_to_livekit(stream_info: StreamInfo):
     except Exception as e:
         logger.error(f"Failed to connect to LiveKit: {e}")
         raise
-
 
 async def handle_stream_media(data: dict, stream_info: StreamInfo):
     """Handle incoming audio from Twilio."""
