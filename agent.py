@@ -93,68 +93,116 @@ You are a friendly and articulate AI phone agent working for Melbourne Fitness S
 # async def entrypoint(ctx: JobContext):
 #     """Main entry point for the agent."""
     
-#     # Create the agent session with all components
-#     session = AgentSession(
-#         stt=deepgram.STT(
-#             api_key=os.getenv("DEEPGRAM_API_KEY"),
-#             model="nova-2",
-#             language="en-US"
-#         ),
-#         llm=openai.LLM(
-#             api_key=os.getenv("OPENAI_API_KEY"),
-#             model="gpt-4o-mini",
-#             temperature=0.7
-#         ),
-#         tts=elevenlabs.TTS(
-#             api_key=os.getenv("ELEVENLABS_API_KEY"),
-#             voice_id="aGkVQvWUZi16EH8aZJvT",  # Use voice_id instead of voice
-#             model="eleven_monolingual_v1"
-#         ),
-#         vad=silero.VAD.load(),
-#     )
+#     # Check if this is a phone call room
+#     room_name = ctx.room.name
+#     is_phone_call = room_name.startswith("call-")
     
-#     # Start the session with our agent
-#     await session.start(room=ctx.room, agent=MelbourneFitnessAgent())
-    
-#     # Connect to the room
+#     # Parse room metadata
+#     phone_number = None
+#     if ctx.room.metadata:
+#         try:
+#             import json
+#             metadata = json.loads(ctx.room.metadata)
+#             is_phone_call = metadata.get("type") == "phone_call"
+#             phone_number = metadata.get("from")
+#             logger.info(f"Phone call from: {phone_number}")
+#         except:
+#             pass
+
+#     # Connect to room first
 #     await ctx.connect()
-    
-#     # Keep the agent running
-#     await asyncio.Event().wait()
+#     logger.info(f"Connected to room: {room_name}")
+
+#     try:
+#         # Create phone-optimized session
+#         if is_phone_call:
+#             await asyncio.sleep(1)
+#             session = AgentSession(
+#                 stt=deepgram.STT(
+#                     api_key=os.getenv("DEEPGRAM_API_KEY"),
+#                     model="nova-2-phonecall",  # Phone-optimized model
+#                     language="en-US",
+#                     # Phone-specific settings
+#                     smart_format=True,
+#                     punctuate=True,
+#                     endpointing_ms=1000
+#                 ),
+#                 llm=openai.LLM(
+#                     api_key=os.getenv("OPENAI_API_KEY"),
+#                     model="gpt-4o-mini",
+#                     temperature=0.7
+#                 ),
+#                 tts=elevenlabs.TTS(
+#                     api_key=os.getenv("ELEVENLABS_API_KEY"),
+#                     voice_id="aGkVQvWUZi16EH8aZJvT",
+#                     model="eleven_turbo_v2",  # Low latency model
+#                     streaming_latency=3,  # Optimize for phone
+#                 ),
+#                 vad=silero.VAD.load(),
+#             )
+            
+#             logger.info(f"Starting phone session in room: {room_name}")
+#         else:
+#             # Regular web session config
+#             session = AgentSession(
+#                 stt=deepgram.STT(
+#                 api_key=os.getenv("DEEPGRAM_API_KEY"),
+#                 model="nova-2",
+#                 language="en-US"
+#             ),
+#             llm=openai.LLM(
+#                 api_key=os.getenv("OPENAI_API_KEY"),
+#                 model="gpt-4o-mini",
+#                 temperature=0.7
+#             ),
+#             tts=elevenlabs.TTS(
+#                 api_key=os.getenv("ELEVENLABS_API_KEY"),
+#                 voice_id="aGkVQvWUZi16EH8aZJvT",  # Use voice_id instead of voice
+#                 model="eleven_monolingual_v1"
+#             ),
+#             vad=silero.VAD.load(),
+#             )
+        
+#         # Start the session
+#         await session.start(room=ctx.room, agent=MelbourneFitnessAgent())
+#     except Exception as e:
+#         logger.error(f"Failed to start agent session: {e}")
+#         await ctx.room.close()
 
 async def entrypoint(ctx: JobContext):
     """Main entry point for the agent."""
     
-    # Check if this is a phone call room
-    room_name = ctx.room.name
-    is_phone_call = room_name.startswith("call-")
-    
-    # Parse room metadata
-    phone_number = None
-    if ctx.room.metadata:
-        try:
-            import json
-            metadata = json.loads(ctx.room.metadata)
-            is_phone_call = metadata.get("type") == "phone_call"
-            phone_number = metadata.get("from")
-            logger.info(f"Phone call from: {phone_number}")
-        except:
-            pass
-
-    # Connect to room first
-    await ctx.connect()
-    logger.info(f"Connected to room: {room_name}")
-
     try:
-        # Create phone-optimized session
+        # Connect to room FIRST before any other operations
+        logger.info(f"Connecting to room: {ctx.room.name}")
+        await ctx.connect(auto_subscribe=rtc.AutoSubscribe.AUDIO_ONLY)
+        logger.info(f"Successfully connected to room: {ctx.room.name}")
+        
+        # Parse room metadata
+        is_phone_call = ctx.room.name.startswith("call-")
+        phone_number = None
+        
+        if ctx.room.metadata:
+            try:
+                import json
+                metadata = json.loads(ctx.room.metadata)
+                is_phone_call = metadata.get("type") == "phone_call"
+                phone_number = metadata.get("from")
+                logger.info(f"Phone call from: {phone_number}")
+            except Exception as e:
+                logger.error(f"Failed to parse metadata: {e}")
+        
+        # Wait a moment for connection to stabilize
+        await asyncio.sleep(0.5)
+        
+        # Create appropriate session configuration
         if is_phone_call:
-            await asyncio.sleep(1)
+            logger.info("Creating phone-optimized session")
             session = AgentSession(
                 stt=deepgram.STT(
                     api_key=os.getenv("DEEPGRAM_API_KEY"),
-                    model="nova-2-phonecall",  # Phone-optimized model
+                    model="nova-2-phonecall",
                     language="en-US",
-                    # Phone-specific settings
                     smart_format=True,
                     punctuate=True,
                     endpointing_ms=1000
@@ -167,39 +215,45 @@ async def entrypoint(ctx: JobContext):
                 tts=elevenlabs.TTS(
                     api_key=os.getenv("ELEVENLABS_API_KEY"),
                     voice_id="aGkVQvWUZi16EH8aZJvT",
-                    model="eleven_turbo_v2",  # Low latency model
-                    streaming_latency=3,  # Optimize for phone
+                    model="eleven_turbo_v2",
+                    streaming_latency=3,
                 ),
                 vad=silero.VAD.load(),
             )
-            
-            logger.info(f"Starting phone session in room: {room_name}")
         else:
-            # Regular web session config
+            logger.info("Creating standard session")
             session = AgentSession(
                 stt=deepgram.STT(
-                api_key=os.getenv("DEEPGRAM_API_KEY"),
-                model="nova-2",
-                language="en-US"
-            ),
-            llm=openai.LLM(
-                api_key=os.getenv("OPENAI_API_KEY"),
-                model="gpt-4o-mini",
-                temperature=0.7
-            ),
-            tts=elevenlabs.TTS(
-                api_key=os.getenv("ELEVENLABS_API_KEY"),
-                voice_id="aGkVQvWUZi16EH8aZJvT",  # Use voice_id instead of voice
-                model="eleven_monolingual_v1"
-            ),
-            vad=silero.VAD.load(),
+                    api_key=os.getenv("DEEPGRAM_API_KEY"),
+                    model="nova-2",
+                    language="en-US"
+                ),
+                llm=openai.LLM(
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    model="gpt-4o-mini",
+                    temperature=0.7
+                ),
+                tts=elevenlabs.TTS(
+                    api_key=os.getenv("ELEVENLABS_API_KEY"),
+                    voice_id="aGkVQvWUZi16EH8aZJvT",
+                    model="eleven_monolingual_v1"
+                ),
+                vad=silero.VAD.load(),
             )
         
         # Start the session
+        logger.info("Starting agent session...")
         await session.start(room=ctx.room, agent=MelbourneFitnessAgent())
+        logger.info("Agent session started successfully")
+        
     except Exception as e:
-        logger.error(f"Failed to start agent session: {e}")
-        await ctx.room.close()
+        logger.error(f"Failed in entrypoint: {e}", exc_info=True)
+        # Make sure to disconnect on error
+        try:
+            await ctx.disconnect()
+        except:
+            pass
+        raise
 
 
 async def console_mode():
@@ -313,4 +367,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    test_openai_connection()
