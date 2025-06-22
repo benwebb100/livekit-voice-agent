@@ -19,7 +19,7 @@ from livekit.agents import (
     cli,
     Agent,
     AgentSession,
-    ChatContext
+    ChatContext,
 )
 from livekit.plugins import openai, deepgram, elevenlabs, silero
 
@@ -58,6 +58,18 @@ def test_openai_connection():
         print(f"OpenAI API error: {e}")
 
 
+# Simple Mock LLM
+class MockLLM:
+    def __init__(self, **kwargs):
+        pass
+    
+    async def chat(self, chat_ctx, **kwargs):
+        # Simple response generator
+        for word in "Hi there! Thanks for calling Melbourne Fitness Studio. How can I help you today?".split():
+            yield type('obj', (), {'choices': [type('obj', (), {'delta': type('obj', (), {'content': word + ' '})()})]})()
+            await asyncio.sleep(0.1)
+
+
 class MelbourneFitnessAgent(Agent):
     """Melbourne Fitness Studio voice assistant agent."""
     
@@ -88,86 +100,6 @@ You are a friendly and articulate AI phone agent working for Melbourne Fitness S
     async def on_enter(self) -> None:
         """Called when the agent becomes active."""
         await self.session.say("Hi, this is Sarah from Melbourne Fitness Studio. How's it going?")
-
-
-# async def entrypoint(ctx: JobContext):
-#     """Main entry point for the agent."""
-    
-#     # Check if this is a phone call room
-#     room_name = ctx.room.name
-#     is_phone_call = room_name.startswith("call-")
-    
-#     # Parse room metadata
-#     phone_number = None
-#     if ctx.room.metadata:
-#         try:
-#             import json
-#             metadata = json.loads(ctx.room.metadata)
-#             is_phone_call = metadata.get("type") == "phone_call"
-#             phone_number = metadata.get("from")
-#             logger.info(f"Phone call from: {phone_number}")
-#         except:
-#             pass
-
-#     # Connect to room first
-#     await ctx.connect()
-#     logger.info(f"Connected to room: {room_name}")
-
-#     try:
-#         # Create phone-optimized session
-#         if is_phone_call:
-#             await asyncio.sleep(1)
-#             session = AgentSession(
-#                 stt=deepgram.STT(
-#                     api_key=os.getenv("DEEPGRAM_API_KEY"),
-#                     model="nova-2-phonecall",  # Phone-optimized model
-#                     language="en-US",
-#                     # Phone-specific settings
-#                     smart_format=True,
-#                     punctuate=True,
-#                     endpointing_ms=1000
-#                 ),
-#                 llm=openai.LLM(
-#                     api_key=os.getenv("OPENAI_API_KEY"),
-#                     model="gpt-4o-mini",
-#                     temperature=0.7
-#                 ),
-#                 tts=elevenlabs.TTS(
-#                     api_key=os.getenv("ELEVENLABS_API_KEY"),
-#                     voice_id="aGkVQvWUZi16EH8aZJvT",
-#                     model="eleven_turbo_v2",  # Low latency model
-#                     streaming_latency=3,  # Optimize for phone
-#                 ),
-#                 vad=silero.VAD.load(),
-#             )
-            
-#             logger.info(f"Starting phone session in room: {room_name}")
-#         else:
-#             # Regular web session config
-#             session = AgentSession(
-#                 stt=deepgram.STT(
-#                 api_key=os.getenv("DEEPGRAM_API_KEY"),
-#                 model="nova-2",
-#                 language="en-US"
-#             ),
-#             llm=openai.LLM(
-#                 api_key=os.getenv("OPENAI_API_KEY"),
-#                 model="gpt-4o-mini",
-#                 temperature=0.7
-#             ),
-#             tts=elevenlabs.TTS(
-#                 api_key=os.getenv("ELEVENLABS_API_KEY"),
-#                 voice_id="aGkVQvWUZi16EH8aZJvT",  # Use voice_id instead of voice
-#                 model="eleven_monolingual_v1"
-#             ),
-#             vad=silero.VAD.load(),
-#             )
-        
-#         # Start the session
-#         await session.start(room=ctx.room, agent=MelbourneFitnessAgent())
-#     except Exception as e:
-#         logger.error(f"Failed to start agent session: {e}")
-#         await ctx.room.close()
 
 async def entrypoint(ctx: JobContext):
     """Main entry point for the agent."""
@@ -216,11 +148,12 @@ async def entrypoint(ctx: JobContext):
                     punctuate=True,
                     endpointing_ms=1000
                 ),
-                llm=openai.LLM(
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    model="gpt-4o-mini",
-                    temperature=0.7
-                ),
+                # llm=openai.LLM(
+                #     api_key=os.getenv("OPENAI_API_KEY"),
+                #     model="gpt-4o-mini",
+                #     temperature=0.7
+                # ),
+                llm=MockLLM(),
                 tts=elevenlabs.TTS(
                     api_key=os.getenv("ELEVENLABS_API_KEY"),
                     voice_id="aGkVQvWUZi16EH8aZJvT",
