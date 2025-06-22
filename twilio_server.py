@@ -381,9 +381,19 @@ async def forward_audio_to_twilio(stream_info: StreamInfo):
         # Create an audio stream from the track
         audio_stream = rtc.AudioStream(stream_info.subscribed_track)
         
+        frame_count = 0
         async for event in audio_stream:
+            # Debug log to see what events we're getting
+            if frame_count < 5:  # Log first 5 events
+                logger.info(f"Received event type: {type(event)}")
+            
             if isinstance(event, rtc.AudioFrameEvent):
                 frame = event.frame
+                frame_count += 1
+                
+                # Log first few frames to confirm we're getting audio
+                if frame_count < 5:
+                    logger.info(f"Processing audio frame {frame_count}: sample_rate={frame.sample_rate}, channels={frame.num_channels}, samples={frame.samples_per_channel}")
                 
                 # Check if WebSocket is still valid
                 if not stream_info.websocket or not hasattr(stream_info.websocket, 'send_text'):
@@ -420,10 +430,16 @@ async def forward_audio_to_twilio(stream_info: StreamInfo):
                     
                     await stream_info.websocket.send_text(json.dumps(media_message))
                     
+                    # Log periodically to confirm sending
+                    if frame_count % 100 == 0:
+                        logger.info(f"Sent {frame_count} audio frames to Twilio")
+                    
                 except Exception as e:
                     logger.error(f"Error sending audio frame: {e}")
                     if "WebSocket is not connected" in str(e):
                         break
+        
+        logger.info(f"Audio forwarding ended. Total frames sent: {frame_count}")
                 
     except Exception as e:
         logger.error(f"Error in audio forwarding loop: {e}", exc_info=True)
