@@ -58,11 +58,10 @@ def test_openai_connection():
         print(f"OpenAI API error: {e}")
 
 
-# Add this import at the top
-from livekit.agents.llm import LLM, LLMStream, ChatContext, ChatMessage, ChatRole
-from typing import Optional, Any, Union
+# Replace your MockLLM class with this updated version that accepts all arguments:
+from livekit.agents.llm import LLM, LLMStream, ChatContext
+from typing import Optional, Any, Union, List
 
-# Replace your MockLLM class with this simpler implementation:
 class MockLLM(LLM):
     def __init__(self, *, model: str = "mock-model", **kwargs):
         super().__init__()
@@ -85,6 +84,9 @@ class MockLLM(LLM):
         n: Optional[int] = None,
         parallel_tool_calls: Optional[bool] = None,
         tool_choice: Optional[Union[dict, str]] = None,
+        tools: Optional[List[Any]] = None,  # Add this
+        conn_options: Optional[Any] = None,  # Add this
+        **kwargs  # Catch any other unexpected arguments
     ) -> "LLMStream":
         # Get the response
         response = self._responses[self._response_index % len(self._responses)]
@@ -97,6 +99,8 @@ class MockLLM(LLM):
         
         # Return an LLMStream with the generator
         return LLMStream(aiter=_generate())
+
+
 
 
 class MelbourneFitnessAgent(Agent):
