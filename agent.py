@@ -19,7 +19,7 @@ from livekit.agents import (
     cli,
     Agent,
     AgentSession,
-    ChatContext,
+    ChatContext
 )
 from livekit.plugins import openai, deepgram, elevenlabs, silero
 
@@ -173,9 +173,18 @@ async def entrypoint(ctx: JobContext):
     """Main entry point for the agent."""
     
     try:
-        # Connect to room FIRST before any other operations
+        # Connect to room with audio-only subscription
         logger.info(f"Connecting to room: {ctx.room.name}")
-        await ctx.connect(auto_subscribe=rtc.AutoSubscribe.AUDIO_ONLY)
+        # await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+        # If you need to check what's available
+        try:
+            from livekit.agents import AutoSubscribe
+            await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+        except ImportError:
+            # Fallback to default behavior
+            await ctx.connect()
+
         logger.info(f"Successfully connected to room: {ctx.room.name}")
         
         # Parse room metadata
@@ -250,7 +259,9 @@ async def entrypoint(ctx: JobContext):
         logger.error(f"Failed in entrypoint: {e}", exc_info=True)
         # Make sure to disconnect on error
         try:
-            await ctx.disconnect()
+            # await ctx.disconnect()
+            ctx.shutdown(reason=f"Error in entrypoint: {str(e)}")
+            raise
         except:
             pass
         raise
