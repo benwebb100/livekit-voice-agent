@@ -19,7 +19,7 @@ from livekit.agents import (
     cli,
     Agent,
     AgentSession,
-    ChatContext,
+    ChatContext
 )
 from livekit.plugins import openai, deepgram, elevenlabs, silero
 
@@ -58,49 +58,16 @@ def test_openai_connection():
         print(f"OpenAI API error: {e}")
 
 
-# Replace your MockLLM class with this updated version that accepts all arguments:
-from livekit.agents.llm import LLM, LLMStream, ChatContext
-from typing import Optional, Any, Union, List
-
-class MockLLM(LLM):
-    def __init__(self, *, model: str = "mock-model", **kwargs):
-        super().__init__()
-        self._model = model
-        self._responses = [
-            "Hi there! Thanks for calling Melbourne Fitness Studio. I'm Sarah. How are you doing today?",
-            "That's great to hear! I see you have a tour booked with us. What day were you planning to come in?",
-            "Perfect! And what are your main fitness goals?",
-            "Excellent! We have great programs for that. Any injuries we should know about?",
-            "Got it. We'll make sure everything is ready for your visit. See you soon!"
-        ]
-        self._response_index = 0
-
-    async def chat(
-        self,
-        *,
-        chat_ctx: ChatContext,
-        fnc_ctx: Optional[Any] = None,
-        temperature: Optional[float] = None,
-        n: Optional[int] = None,
-        parallel_tool_calls: Optional[bool] = None,
-        tool_choice: Optional[Union[dict, str]] = None,
-        tools: Optional[List[Any]] = None,  # Add this
-        conn_options: Optional[Any] = None,  # Add this
-        **kwargs  # Catch any other unexpected arguments
-    ) -> "LLMStream":
-        # Get the response
-        response = self._responses[self._response_index % len(self._responses)]
-        self._response_index += 1
-        
-        # Create a simple async generator that yields the complete response
-        async def _generate():
-            # For simplicity, yield the entire response at once
-            yield response
-        
-        # Return an LLMStream with the generator
-        return LLMStream(aiter=_generate())
-
-
+# Simple Mock LLM
+class MockLLM:
+    def __init__(self, **kwargs):
+        pass
+    
+    async def chat(self, chat_ctx, **kwargs):
+        # Simple response generator
+        for word in "Hi there! Thanks for calling Melbourne Fitness Studio. How can I help you today?".split():
+            yield type('obj', (), {'choices': [type('obj', (), {'delta': type('obj', (), {'content': word + ' '})()})]})()
+            await asyncio.sleep(0.1)
 
 
 class MelbourneFitnessAgent(Agent):
@@ -181,12 +148,11 @@ async def entrypoint(ctx: JobContext):
                     punctuate=True,
                     endpointing_ms=1000
                 ),
-                # llm=openai.LLM(
-                #     api_key=os.getenv("OPENAI_API_KEY"),
-                #     model="gpt-4o-mini",
-                #     temperature=0.7
-                # ),
-                llm=MockLLM(),
+                llm=openai.LLM(
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    model="gpt-4o-mini",
+                    temperature=0.7
+                ),
                 tts=elevenlabs.TTS(
                     api_key=os.getenv("ELEVENLABS_API_KEY"),
                     voice_id="aGkVQvWUZi16EH8aZJvT",
