@@ -44,22 +44,6 @@ active_streams: Dict[str, dict] = {}
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 
-# Add this near the top of your file after imports
-def test_token_generation():
-    """Test which token generation method works."""
-    try:
-        # Test method 1
-        token = api.AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
-        if hasattr(token, 'add_grant'):
-            print("Method 1: add_grant exists")
-        elif hasattr(token, 'with_grants'):
-            print("Method 2: with_grants exists")
-        else:
-            print("Available methods:", dir(token))
-    except Exception as e:
-        print(f"Error testing token: {e}")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
