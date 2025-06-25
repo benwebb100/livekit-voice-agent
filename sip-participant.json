@@ -1,0 +1,8 @@
+{
+  "sip_trunk_id": "ST_8PQCz35SLanv",
+  "sip_call_to": "+919837277206",
+  "room_name": "call-12345",
+  "participant_identity": "sip-test",
+  "participant_name": "Test Caller",
+  "play_dialtone": true
+}
