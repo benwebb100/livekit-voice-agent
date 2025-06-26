@@ -27,7 +27,6 @@ from livekit.plugins import (
     silero,
     noise_cancellation,  # noqa: F401
 )
-from livekit.plugins.turn_detector.english import EnglishModel
 
 
 # load environment variables, this is optional, only used for local development
