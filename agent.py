@@ -236,6 +236,175 @@
 
 #!/usr/bin/env python3
 
+# import asyncio
+# import json
+# import logging
+# import os
+# from dotenv import load_dotenv
+# from typing import Any
+
+# from livekit import rtc, api
+# from livekit.agents import (
+#     Agent,
+#     AgentSession,
+#     JobContext,
+#     RoomInputOptions,
+#     RunContext,
+#     WorkerOptions,
+#     cli,
+#     function_tool,
+#     get_job_context,
+# )
+# from livekit.plugins import (
+#     openai,
+#     silero,
+# )
+
+# # Load .env.local
+# load_dotenv(dotenv_path=".env.local")
+# logger = logging.getLogger("outbound-realtime-fitness")
+# logger.setLevel(logging.INFO)
+
+# outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
+
+
+# class FitnessOutboundAgent(Agent):
+#     def __init__(self, *, name: str, tour_time: str, dial_info: dict[str, Any]):
+#         super().__init__(instructions=f"""
+#         You are a friendly front desk receptionist from Melbourne Fitness Studio calling to confirm a tour appointment with a customer named {name} scheduled for {tour_time}.
+
+#         [Your Personality]
+#         - You sound like Sarah from Melbourne Fitness.
+#         - Be cheerful, energetic, and supportive.
+#         - Always speak like a real human — avoid robotic or overly formal tone.
+#         - Ask one question at a time. Wait for the user to reply before continuing.
+#         - Don’t rush. Build rapport and gather details for the visit.
+
+#         [When the customer requests a human agent]
+#         - Confirm with them first, then use the transfer_call tool.
+
+#         [If you reach voicemail]
+#         - Wait until the voicemail greeting ends, then use the detected_answering_machine tool.
+
+#         [DO NOT]
+#         - Never say you’re an AI.
+#         - Never mention this is a simulation or test.
+#         - Never offer real-time booking or integrations.
+
+#         End politely once all key info is confirmed.
+#         """)
+#         self.participant: rtc.RemoteParticipant | None = None
+#         self.dial_info = dial_info
+
+#     def set_participant(self, participant: rtc.RemoteParticipant):
+#         self.participant = participant
+
+#     async def hangup(self):
+#         job_ctx = get_job_context()
+#         await job_ctx.api.room.delete_room(api.DeleteRoomRequest(room=job_ctx.room.name))
+
+#     @function_tool()
+#     async def transfer_call(self, ctx: RunContext):
+#         transfer_to = self.dial_info.get("transfer_to")
+#         if not transfer_to:
+#             return "Transfer number not available."
+
+#         logger.info(f"Transferring call to: {transfer_to}")
+#         await ctx.session.generate_reply(instructions="Sure, let me transfer you now.")
+#         job_ctx = get_job_context()
+#         try:
+#             await job_ctx.api.sip.transfer_sip_participant(
+#                 api.TransferSIPParticipantRequest(
+#                     room_name=job_ctx.room.name,
+#                     participant_identity=self.participant.identity,
+#                     transfer_to=f"tel:{transfer_to}",
+#                 )
+#             )
+#         except Exception as e:
+#             logger.error(f"Error during transfer: {e}")
+#             await ctx.session.generate_reply(instructions="Sorry, there was an issue transferring you.")
+#             await self.hangup()
+
+#     @function_tool()
+#     async def end_call(self, ctx: RunContext):
+#         logger.info(f"Call ended by user: {self.participant.identity}")
+#         if ctx.session.current_speech:
+#             await ctx.session.current_speech.wait_for_playout()
+#         await self.hangup()
+
+#     @function_tool()
+#     async def detected_answering_machine(self, ctx: RunContext):
+#         logger.info(f"Voicemail detected for: {self.participant.identity}")
+#         await self.hangup()
+
+
+# async def entrypoint(ctx: JobContext):
+#     logger.info(f"Connecting to room: {ctx.room.name}")
+#     await ctx.connect()
+
+#     dial_info = json.loads(ctx.job.metadata or '{}')
+#     participant_identity = phone_number = dial_info.get("phone_number")
+
+#     agent = FitnessOutboundAgent(
+#         name="Jayden",
+#         tour_time="Tuesday at 5 PM",
+#         dial_info=dial_info,
+#     )
+
+#     session = AgentSession(
+#         vad=silero.VAD.load(),
+#         stt=None,  # OpenAI Realtime handles STT internally
+#         llm=openai.realtime.RealtimeModel(
+#             api_key=os.getenv("OPENAI_API_KEY"),
+#             model="gpt-4o-mini-realtime-preview",
+#             voice="nova",  # or "coral", "onyx", etc.
+#             temperature=0.7,
+#         ),
+#     )
+
+#     session_started = asyncio.create_task(
+#         session.start(
+#             agent=agent,
+#             room=ctx.room,
+#             room_input_options=RoomInputOptions(
+#             ),
+#         )
+#     )
+
+#     try:
+#         await ctx.api.sip.create_sip_participant(
+#             api.CreateSIPParticipantRequest(
+#                 room_name=ctx.room.name,
+#                 sip_trunk_id=outbound_trunk_id,
+#                 sip_call_to=phone_number,
+#                 participant_identity=participant_identity,
+#                 wait_until_answered=True,
+#             )
+#         )
+
+#         await session_started
+#         participant = await ctx.wait_for_participant(identity=participant_identity)
+#         logger.info(f"Participant joined: {participant.identity}")
+#         agent.set_participant(participant)
+
+#     except api.TwirpError as e:
+#         logger.error(
+#             f"Failed to dial: {e.message}, "
+#             f"SIP status: {e.metadata.get('sip_status_code')} "
+#             f"{e.metadata.get('sip_status')}"
+#         )
+#         ctx.shutdown()
+
+
+# if __name__ == "__main__":
+#     cli.run_app(
+#         WorkerOptions(
+#             entrypoint_fnc=entrypoint,
+#             agent_name="outbound-caller-fitness",
+#         )
+#     )
+
+
 import asyncio
 import json
 import logging
@@ -269,29 +438,56 @@ outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
 
 
 class FitnessOutboundAgent(Agent):
-    def __init__(self, *, name: str, tour_time: str, dial_info: dict[str, Any]):
+    def __init__(self, *, name: str, dial_info: dict[str, Any]):
         super().__init__(instructions=f"""
-        You are a friendly front desk receptionist from Melbourne Fitness Studio calling to confirm a tour appointment with a customer named {name} scheduled for {tour_time}.
+        You are Sarah, a friendly team member from Melbourne Fitness Studio calling a lead who previously enquired online about joining the club but never booked a tour. Your job is to reconnect, build quick rapport, offer them a free 1-week "mini membership" trial, and book them in for a visit to get started. You are NOT an AI demo assistant. This is NOT a test call — act like a real team member checking in.
 
-        [Your Personality]
-        - You sound like Sarah from Melbourne Fitness.
-        - Be cheerful, energetic, and supportive.
-        - Always speak like a real human — avoid robotic or overly formal tone.
-        - Ask one question at a time. Wait for the user to reply before continuing.
-        - Don’t rush. Build rapport and gather details for the visit.
+        [Style]
+        - Speak clearly and naturally with a warm, upbeat, and conversational tone
+        - Avoid robotic or overly formal speech
+        - Ask one question at a time and pause to listen
+        - Reflect the business tone: friendly, motivating, supportive
+        - Keep the call brief — your goal is to identify interest and book a visit
 
-        [When the customer requests a human agent]
+        [Conversation Flow]
+        1. GREET: "Hi {name}, it's Sarah from Melbourne Fitness Studio — how's your day going?"
+
+        2. RE-ENGAGEMENT: "You popped your details in with us a little while ago — I just wanted to quickly check in. Were you still looking to start something for your health and fitness?"
+        → Wait for response
+
+        3. QUICK DISCOVERY: 
+        - "Awesome — out of curiosity, is there anything in particular you've been hoping to improve or work on?" → Wait for response
+        - "Are you training anywhere at the moment, or still figuring out what feels right?" → Wait for response
+
+        4. OFFER MINI MEMBERSHIP: "No worries at all — since you enquired, you actually qualify for one of our 1-week mini memberships. It's a great way to come in, try it out, and see if we're the right fit for you."
+        "Would you be open to popping in this week to check things out?" → Wait for confirmation
+
+        5. SCHEDULING: Use check_availability to fetch times based on user's preference. Casually offer 2–3 options: "We've got a few spots open around [X time] or [Y time] — would either of those suit you?"
+
+        6. FINAL WRAP: "You know where we're located, right? We're at 25 Carlisle Street, St Kilda. When you come in, we'll have a quick chat about your goals and show you around the space. Then you can get started with your trial! Looking forward to seeing you — have a great day!"
+
+        [Error Handling]
+        - If confused about enquiry: "Totally fine — maybe someone used your number or you popped your name in somewhere online. I'll keep it super quick."
+        - If rushed/unsure: "No worries at all — I'll let the team know, and we can follow up another time if you're interested."
+
+        [Business Info]
+        - Business: Melbourne Fitness Studio
+        - Location: 25 Carlisle Street, St Kilda, Melbourne VIC
+        - Services: Strength & conditioning, group classes, personal training
+        - Offer: 1-week "mini membership" trial
+
+        [When customer requests human agent]
         - Confirm with them first, then use the transfer_call tool.
 
         [If you reach voicemail]
         - Wait until the voicemail greeting ends, then use the detected_answering_machine tool.
 
         [DO NOT]
-        - Never say you’re an AI.
-        - Never mention this is a simulation or test.
-        - Never offer real-time booking or integrations.
+        - Never say you're an AI or mention this is a simulation
+        - Never offer real-time booking integrations beyond what's available
+        - Don't rush through the conversation
 
-        End politely once all key info is confirmed.
+        End politely after booking or clear decline.
         """)
         self.participant: rtc.RemoteParticipant | None = None
         self.dial_info = dial_info
@@ -304,13 +500,34 @@ class FitnessOutboundAgent(Agent):
         await job_ctx.api.room.delete_room(api.DeleteRoomRequest(room=job_ctx.room.name))
 
     @function_tool()
+    async def check_availability(self, ctx: RunContext, day_preference: str = "", time_preference: str = ""):
+        """Check available appointment slots for the customer"""
+        logger.info(f"Checking availability for {day_preference} {time_preference}")
+        # This would integrate with your actual booking system
+        # For now, return some example slots
+        available_slots = [
+            "Tuesday at 10am",
+            "Wednesday at 2pm", 
+            "Thursday at 6pm"
+        ]
+        return f"Available slots: {', '.join(available_slots)}"
+
+    @function_tool()
+    async def book_appointment(self, ctx: RunContext, appointment_time: str, customer_name: str = ""):
+        """Book an appointment for the customer"""
+        logger.info(f"Booking appointment: {appointment_time} for {customer_name}")
+        # This would integrate with your actual booking system
+        await ctx.session.generate_reply(instructions=f"Perfect — I've locked that in for you at {appointment_time}. We'll see you then!")
+        return f"Appointment booked for {appointment_time}"
+
+    @function_tool()
     async def transfer_call(self, ctx: RunContext):
         transfer_to = self.dial_info.get("transfer_to")
         if not transfer_to:
             return "Transfer number not available."
 
         logger.info(f"Transferring call to: {transfer_to}")
-        await ctx.session.generate_reply(instructions="Sure, let me transfer you now.")
+        await ctx.session.generate_reply(instructions="Sure, let me transfer you to one of our team members now.")
         job_ctx = get_job_context()
         try:
             await job_ctx.api.sip.transfer_sip_participant(
@@ -322,7 +539,7 @@ class FitnessOutboundAgent(Agent):
             )
         except Exception as e:
             logger.error(f"Error during transfer: {e}")
-            await ctx.session.generate_reply(instructions="Sorry, there was an issue transferring you.")
+            await ctx.session.generate_reply(instructions="Sorry, there was an issue transferring you. Let me try to help you directly.")
             await self.hangup()
 
     @function_tool()
@@ -335,6 +552,8 @@ class FitnessOutboundAgent(Agent):
     @function_tool()
     async def detected_answering_machine(self, ctx: RunContext):
         logger.info(f"Voicemail detected for: {self.participant.identity}")
+        await ctx.session.generate_reply(instructions="Hi, this is Sarah from Melbourne Fitness Studio. I was just calling to check in about your fitness enquiry. I'll try you again another time, or feel free to give us a call back on our main number. Have a great day!")
+        await asyncio.sleep(2)  # Give time for the message to complete
         await self.hangup()
 
 
@@ -345,9 +564,11 @@ async def entrypoint(ctx: JobContext):
     dial_info = json.loads(ctx.job.metadata or '{}')
     participant_identity = phone_number = dial_info.get("phone_number")
 
+    # Extract customer name from dial_info, default to "there" if not provided
+    customer_name = dial_info.get("customer_name", "there")
+
     agent = FitnessOutboundAgent(
-        name="Jayden",
-        tour_time="Tuesday at 5 PM",
+        name=customer_name,
         dial_info=dial_info,
     )
 
@@ -357,7 +578,7 @@ async def entrypoint(ctx: JobContext):
         llm=openai.realtime.RealtimeModel(
             api_key=os.getenv("OPENAI_API_KEY"),
             model="gpt-4o-mini-realtime-preview",
-            voice="nova",  # or "coral", "onyx", etc.
+            voice="coral",  # or "nova", "coral", "onyx", etc.
             temperature=0.7,
         ),
     )
